@@ -7,7 +7,11 @@
     "dev": "next dev --turbopack",
     "build": "npm install --legacy-peer-deps && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
     "dependencies": {
         "@babel/parser": "^7.28.5",
@@ -67,12 +71,14 @@
         "estree-walker": "2.0.2",
         "framer-motion": "^12.23.24",
         "input-otp": "^1.4.2",
+        "jsonwebtoken": "^9.0.2",
         "lucide-react": "^0.552.0",
         "mini-svg-data-uri": "^1.4.4",
         "motion": "^12.23.24",
         "motion-dom": "^12.23.23",
         "next": "^15.3.5",
         "next-themes": "^0.4.6",
+        "pg": "^8.13.1",
         "qss": "^3.0.0",
         "react": "^19.0.0",
         "react-day-picker": "^9.8.0",
@@ -101,7 +107,10 @@
     "devDependencies": {
         "@eslint/eslintrc": "^3.3.1",
         "@tailwindcss/postcss": "^4",
+        "@types/bcrypt": "^5.0.2",
+        "@types/jsonwebtoken": "^9.0.7",
         "@types/node": "^20",
+        "@types/pg": "^8.11.10",
         "@types/react": "^19",
         "@types/react-dom": "^19",
         "@types/react-syntax-highlighter": "^15.5.13",

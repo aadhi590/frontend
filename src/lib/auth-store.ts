@@ -6,137 +6,210 @@ export interface User {
   email: string;
   name: string;
   phone?: string;
-  createdAt: string;
+  emailVerified: boolean;
+  mfaEnabled: boolean;
 }
 
 export type KycStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export interface KycData {
-  aadhaarNumber?: string;
-  panNumber?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  pincode?: string;
-  dob?: string;
-  aadhaarFront?: string;
-  aadhaarBack?: string;
-  panCard?: string;
-  selfie?: string;
   status: KycStatus;
   submittedAt?: string;
+  verifiedAt?: string;
   rejectionReason?: string;
+  city?: string;
+  state?: string;
 }
 
 interface AuthState {
   isLoggedIn: boolean;
   user: User | null;
+  accessToken: string | null;
+  refreshToken: string | null;
   kycData: KycData;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, password: string, phone?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
-  updateKyc: (data: Partial<KycData>) => void;
-  submitKyc: () => Promise<{ success: boolean; error?: string }>;
+  setTokens: (accessToken: string, refreshToken: string) => void;
+  fetchKycStatus: () => Promise<void>;
+  submitKyc: (data: {
+    aadhaarNumber: string;
+    panNumber: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    dob?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
 }
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       isLoggedIn: false,
       user: null,
+      accessToken: null,
+      refreshToken: null,
       kycData: {
         status: 'NOT_STARTED',
       },
       
+      setTokens: (accessToken: string, refreshToken: string) => {
+        set({ accessToken, refreshToken });
+        if (typeof document !== 'undefined') {
+          document.cookie = `accessToken=${accessToken}; path=/; max-age=900`; // 15 minutes
+        }
+      },
+      
       login: async (email: string, password: string) => {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Basic validation
-        if (!email || !password) {
-          return { success: false, error: 'Email and password are required' };
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password }),
+          });
+          
+          const result = await response.json();
+          
+          if (!response.ok) {
+            return { success: false, error: result.error || 'Login failed' };
+          }
+          
+          const { user, accessToken, refreshToken } = result.data;
+          
+          set({
+            isLoggedIn: true,
+            user,
+            accessToken,
+            refreshToken,
+          });
+          
+          if (typeof document !== 'undefined') {
+            document.cookie = `accessToken=${accessToken}; path=/; max-age=900`;
+          }
+          
+          // Fetch KYC status after login
+          get().fetchKycStatus();
+          
+          return { success: true };
+        } catch (error) {
+          console.error('Login error:', error);
+          return { success: false, error: 'Network error. Please try again.' };
         }
-        
-        if (password.length < 6) {
-          return { success: false, error: 'Invalid credentials' };
-        }
-        
-        // Mock successful login
-        const user: User = {
-          id: Math.random().toString(36).substr(2, 9),
-          email,
-          name: email.split('@')[0],
-          createdAt: new Date().toISOString(),
-        };
-        
-        set({ isLoggedIn: true, user });
-        return { success: true };
       },
       
       register: async (name: string, email: string, password: string, phone?: string) => {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Validation
-        if (!name || !email || !password) {
-          return { success: false, error: 'All fields are required' };
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name, email, password, phone }),
+          });
+          
+          const result = await response.json();
+          
+          if (!response.ok) {
+            return { success: false, error: result.error || 'Registration failed' };
+          }
+          
+          const { user, accessToken, refreshToken } = result.data;
+          
+          set({
+            isLoggedIn: true,
+            user,
+            accessToken,
+            refreshToken,
+          });
+          
+          if (typeof document !== 'undefined') {
+            document.cookie = `accessToken=${accessToken}; path=/; max-age=900`;
+          }
+          
+          return { success: true };
+        } catch (error) {
+          console.error('Registration error:', error);
+          return { success: false, error: 'Network error. Please try again.' };
         }
-        
-        if (password.length < 8) {
-          return { success: false, error: 'Password must be at least 8 characters' };
-        }
-        
-        if (!email.includes('@')) {
-          return { success: false, error: 'Invalid email address' };
-        }
-        
-        // Mock successful registration
-        const user: User = {
-          id: Math.random().toString(36).substr(2, 9),
-          email,
-          name,
-          phone,
-          createdAt: new Date().toISOString(),
-        };
-        
-        set({ isLoggedIn: true, user });
-        return { success: true };
       },
       
       logout: () => {
-        set({ isLoggedIn: false, user: null });
-      },
-      
-      updateKyc: (data: Partial<KycData>) => {
-        set(state => ({
-          kycData: { ...state.kycData, ...data, status: 'IN_PROGRESS' }
-        }));
-      },
-      
-      submitKyc: async () => {
-        const { kycData } = get();
+        set({
+          isLoggedIn: false,
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          kycData: { status: 'NOT_STARTED' },
+        });
         
-        // Validate required fields
-        if (!kycData.aadhaarNumber || !kycData.panNumber) {
-          return { success: false, error: 'Aadhaar and PAN are required' };
+        if (typeof document !== 'undefined') {
+          document.cookie = 'accessToken=; path=/; max-age=0';
+        }
+      },
+      
+      fetchKycStatus: async () => {
+        const { accessToken } = get();
+        if (!accessToken) return;
+        
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/kyc/submit`, {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+            },
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            set({ kycData: result.data });
+          }
+        } catch (error) {
+          console.error('Fetch KYC status error:', error);
+        }
+      },
+      
+      submitKyc: async (data) => {
+        const { accessToken } = get();
+        if (!accessToken) {
+          return { success: false, error: 'Not authenticated' };
         }
         
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        set(state => ({
-          kycData: {
-            ...state.kycData,
-            status: 'PENDING',
-            submittedAt: new Date().toISOString(),
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/kyc/submit`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(data),
+          });
+          
+          const result = await response.json();
+          
+          if (!response.ok) {
+            return { success: false, error: result.error || 'KYC submission failed' };
           }
-        }));
-        
-        return { success: true };
+          
+          set({ kycData: result.data });
+          return { success: true };
+        } catch (error) {
+          console.error('KYC submission error:', error);
+          return { success: false, error: 'Network error. Please try again.' };
+        }
       },
     }),
     {
       name: 'auth-storage',
+      partialize: (state) => ({
+        isLoggedIn: state.isLoggedIn,
+        user: state.user,
+        refreshToken: state.refreshToken,
+        kycData: state.kycData,
+      }),
     }
   )
 );
